@@ -143,8 +143,11 @@ Return ONLY a JSON array (no markdown, no explanation) with one object per artic
 
       const data = await response.json();
       const text = data.content?.[0]?.text || "[]";
+      console.log(`[Claude] Response preview: ${text.slice(0, 120)}`);
       const clean = text.replace(/```json|```/g, "").trim();
-      const batchResults = JSON.parse(clean);
+      const match = clean.match(/\[[\s\S]*\]/);
+      if (!match) throw new Error(`No JSON array found. Got: ${clean.slice(0, 100)}`);
+      const batchResults = JSON.parse(match[0]);
       allResults.push(...batchResults);
       console.log(`[Claude] Batch complete — ${batchResults.length} results`);
     } catch (err) {
