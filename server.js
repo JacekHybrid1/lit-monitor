@@ -240,16 +240,28 @@ This tool does not constitute pharmacovigilance signal detection under GVP Modul
 // STEP 4 — SEND EMAIL
 // ─────────────────────────────────────────────
 async function sendEmail(subject, text) {
+  console.log(`[Email] Connecting to Gmail SMTP...`);
+  console.log(`[Email] From: ${CONFIG.emailFrom}`);
+  console.log(`[Email] To: ${CONFIG.emailTo}`);
+
   const transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
     auth: {
       user: CONFIG.emailFrom,
       pass: CONFIG.emailPassword,
     },
+    connectionTimeout: 30000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
   });
 
+  await transporter.verify();
+  console.log(`[Email] SMTP connection verified`);
+
   await transporter.sendMail({
-    from: `"Lit Monitor 🔬" <${CONFIG.emailFrom}>`,
+    from: `"Lit Monitor" <${CONFIG.emailFrom}>`,
     to: CONFIG.emailTo,
     subject,
     text,
