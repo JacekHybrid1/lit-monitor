@@ -240,34 +240,27 @@ This tool does not constitute pharmacovigilance signal detection under GVP Modul
 // STEP 4 — SEND EMAIL
 // ─────────────────────────────────────────────
 async function sendEmail(subject, text) {
-  console.log(`[Email] Connecting to Gmail SMTP...`);
+  console.log(`[Email] Sending via Resend API...`);
   console.log(`[Email] From: ${CONFIG.emailFrom}`);
   console.log(`[Email] To: ${CONFIG.emailTo}`);
 
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: CONFIG.emailFrom,
-      pass: CONFIG.emailPassword,
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
     },
-    connectionTimeout: 30000,
-    greetingTimeout: 15000,
-    socketTimeout: 30000,
+    body: JSON.stringify({
+      from: `Lit Monitor <onboarding@resend.dev>`,
+      to: [CONFIG.emailTo],
+      subject: subject,
+      text: text,
+    }),
   });
 
-  await transporter.verify();
-  console.log(`[Email] SMTP connection verified`);
-
-  await transporter.sendMail({
-    from: `"Lit Monitor" <${CONFIG.emailFrom}>`,
-    to: CONFIG.emailTo,
-    subject,
-    text,
-  });
-
-  console.log(`[Email] Digest sent to ${CONFIG.emailTo}`);
+  const data = await response.json();
+  if (data.error) throw new Error(`Resend error: ${data.error.message}`);
+  console.log(`[Email] Digest sent successfully. ID: ${data.id}`);
 }
 
 // ─────────────────────────────────────────────
