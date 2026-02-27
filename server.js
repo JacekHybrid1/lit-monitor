@@ -95,17 +95,24 @@ async function fetchPubMed(days, maxResults) {
 // STEP 2 — TRIAGE WITH CLAUDE
 // ─────────────────────────────────────────────
 async function triageWithClaude(articles) {
-  console.log(`[Claude] Triaging ${articles.length} papers...`);
+  console.log(`[Claude] Triaging ${articles.length} papers in batches...`);
 
-  const prompt = `You are a Medical Director at a small pharmaceutical company specialising in sleep and insomnia medicine. You are reviewing recent PubMed publications about melatonin and melatonin agonists (ramelteon, tasimelteon, agomelatine).
+  const BATCH_SIZE = 5;
+  const allResults = [];
+
+  for (let i = 0; i < articles.length; i += BATCH_SIZE) {
+    const batch = articles.slice(i, i + BATCH_SIZE);
+    console.log(`[Claude] Processing batch ${Math.floor(i/BATCH_SIZE)+1} (${batch.length} papers)...`);
+
+    const prompt = `You are a Medical Director at a small pharmaceutical company specialising in sleep and insomnia medicine. You are reviewing recent PubMed publications about melatonin and melatonin agonists (ramelteon, tasimelteon, agomelatine).
 
 For each article, assess clinical relevance for a pharmacovigilance and regulatory affairs team. Be concise and practical.
 
 Articles:
-${articles
+${batch
   .map(
-    (a, i) =>
-      `[${i}] TITLE: ${a.title}\nABSTRACT: ${a.abstract?.slice(0, 600)}`
+    (a, idx) =>
+      `[${idx}] TITLE: ${a.title}\nABSTRACT: ${a.abstract?.slice(0, 500)}`
   )
   .join("\n\n---\n\n")}
 
@@ -119,35 +126,40 @@ Return ONLY a JSON array (no markdown, no explanation) with one object per artic
   }
 ]`;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": CONFIG.anthropicKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": CONFIG.anthropicKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1500,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
 
-  const data = await response.json();
-  const text = data.content?.[0]?.text || "[]";
-
-  try {
-    const clean = text.replace(/```json|```/g, "").trim();
-    return JSON.parse(clean);
-  } catch {
-    console.error("[Claude] Failed to parse response:", text.slice(0, 200));
-    return articles.map(() => ({
-      relevance: "medium",
-      category: "general",
-      summary: "Unable to parse AI assessment — please review manually.",
-      action: "Manual review recommended.",
-    }));
+      const data = await response.json();
+      const text = data.content?.[0]?.text || "[]";
+      const clean = text.replace(/```json|```/g, "").trim();
+      const batchResults = JSON.parse(clean);
+      allResults.push(...batchResults);
+      console.log(`[Claude] Batch complete — ${batchResults.length} results`);
+    } catch (err) {
+      console.error(`[Claude] Batch failed: ${err.message}`);
+      batch.forEach(() => allResults.push({
+        relevance: "medium",
+        category: "general",
+        summary: "Unable to parse AI assessment — please review manually.",
+        action: "Manual review recommended.",
+      }));
+    }
   }
+
+  console.log(`[Claude] All batches complete — ${allResults.length} total assessments`);
+  return allResults;
 }
 
 // ─────────────────────────────────────────────
